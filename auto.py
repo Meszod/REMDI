@@ -12,12 +12,13 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
     ConversationHandler, CallbackQueryHandler, ContextTypes
 )
+from flask import Flask
 
 # === TELEGRAM API VA BOT MA'LUMOTLARI ===
 api_id = 24305108
 api_hash = 'a714fb632fadadc3aea1b8838263241f'
-bot_token = '8004808341:AAE7gvW_3tdnLwX_oXp5oEtclnGzCTFdipA'
-admin_id = 7105959922 # Adminning Telegram user ID sini o'zgartiring (masalan, o'zingizning ID)
+bot_token = '8009391578:AAHk8XUKoOmHxBS0H0-EHpBm0p1J6qwf_qo'
+admin_id = 7105959922  # Adminning Telegram user ID sini o'zgartiring
 
 # === FOYDALANUVCHI HOLATLARI ===
 PHONE, CODE, PASSWORD, BOT_NAME = range(4)
@@ -65,8 +66,7 @@ def load_all_sessions(user_id):
         index += 1
     return clients
 
-# === FLASK APP FOR PING (Faqat ping uchun) ===
-from flask import Flask
+# === FLASK APP FOR PING ===
 app = Flask(__name__)
 
 @app.route('/ping', methods=['GET'])
@@ -290,10 +290,10 @@ async def stop_click(update: Update, context: ContextTypes.DEFAULT_TYPE, from_ca
 
 # === RUN BOT AND FLASK ===
 async def run_bot():
-    app = Application.builder().token(bot_token).build()
+    application = Application.builder().token(bot_token).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("approve", approve))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("approve", approve))
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler)],
         states={
@@ -304,15 +304,18 @@ async def run_bot():
         },
         fallbacks=[]
     )
-    app.add_handler(conv_handler)
-    await app.run_polling()
+    application.add_handler(conv_handler)
+    await application.run_polling()
 
-import threading
-if __name__ == "__main__":
-    bot_thread = threading.Thread(target=asyncio.run(run_bot()), daemon=True)
-    bot_thread.start()
-
-    # Flask serverni boshqa portda ishga tushirish
-    import os
+def run_flask():
     port = int(os.getenv("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
+
+if __name__ == "__main__":
+    import threading
+    bot_thread = threading.Thread(target=asyncio.run(run_bot()), daemon=True)
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    bot_thread.start()
+    flask_thread.start()
+    bot_thread.join()
+    flask_thread.join()
