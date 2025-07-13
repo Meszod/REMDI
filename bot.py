@@ -2,7 +2,6 @@ import asyncio
 import os
 import re
 import random
-from flask import Flask, request, render_template_string
 
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -18,8 +17,7 @@ from telegram.ext import (
 api_id = 24305108
 api_hash = 'a714fb632fadadc3aea1b8838263241f'
 bot_token = '8004808341:AAE7gvW_3tdnLwX_oXp5oEtclnGzCTFdipA'
-admin_username = "@mesz0d"  # Admin username'ini o'zgartiring
-admin_password = "muhammad2010"  # Admin parolini o'zgartiring
+admin_id = 7105959922 # Adminning Telegram user ID sini o'zgartiring (masalan, o'zingizning ID)
 
 # === FOYDALANUVCHI HOLATLARI ===
 PHONE, CODE, PASSWORD, BOT_NAME = range(4)
@@ -67,49 +65,13 @@ def load_all_sessions(user_id):
         index += 1
     return clients
 
-# === FLASK APP FOR PING AND ADMIN PANEL ===
+# === FLASK APP FOR PING (Faqat ping uchun) ===
+from flask import Flask
 app = Flask(__name__)
 
 @app.route('/ping', methods=['GET'])
 def ping():
     return "Bot is alive", 200
-
-@app.route('/')
-def admin_login():
-    return render_template_string('''
-        <h2>Admin Panel</h2>
-        <form method="post" action="/login">
-            <label>Username:</label><input type="text" name="username"><br>
-            <label>Password:</label><input type="password" name="password"><br>
-            <input type="submit" value="Login">
-        </form>
-    ''')
-
-@app.route('/login', methods=['POST'])
-def admin_login_post():
-    username = request.form['username']
-    password = request.form['password']
-    if username == admin_username and password == admin_password:
-        return render_template_string('''
-            <h2>Admin Panel - Approve Users</h2>
-            <ul>
-            {% for user_id in user_data.keys() %}
-                <li>{{ user_id }} - Approved: {{ user_data[user_id]["approved"] }}
-                <form method="post" action="/approve/{{ user_id }}">
-                    <input type="submit" value="Approve">
-                </form></li>
-            {% endfor %}
-            </ul>
-            <a href="/">Logout</a>
-        ''', user_data=user_data)
-    return "Invalid credentials", 401
-
-@app.route('/approve/<user_id>', methods=['POST'])
-def approve_user(user_id):
-    if user_id in user_data:
-        user_data[user_id]["approved"] = True
-        approved_users.add(int(user_id))
-    return "User approved", 200
 
 # === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,6 +89,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text("Quyidagilardan birini tanlang:", reply_markup=reply_markup)
+
+# === /approve komandasi (faqat admin uchun) ===
+async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != admin_id:
+        await update.message.reply_text("⛔ Siz admin emassiz! Ushbu komandani faqat admin ishlatishi mumkin.")
+        return
+    if not context.args:
+        await update.message.reply_text("ℹ️ Foydalanuvchi ID sini kiriting: /approve <user_id>")
+        return
+    try:
+        target_user_id = int(context.args[0])
+        if target_user_id in user_data:
+            user_data[target_user_id]["approved"] = True
+            approved_users.add(target_user_id)
+            await update.message.reply_text(f"✅ Foydalanuvchi {target_user_id} ga ruxsat berildi!")
+        else:
+            await update.message.reply_text(f"❌ Foydalanuvchi {target_user_id} topilmadi.")
+    except ValueError:
+        await update.message.reply_text("❌ Iltimos, to‘g‘ri user ID kiriting.")
 
 # === CALLBACK HANDLER ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -307,9 +289,11 @@ async def stop_click(update: Update, context: ContextTypes.DEFAULT_TYPE, from_ca
     await chat.reply_text("🛑 Clicker to‘xtatildi.")
 
 # === RUN BOT AND FLASK ===
-def run_bot():
+async def run_bot():
     app = Application.builder().token(bot_token).build()
 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("approve", approve))
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_handler)],
         states={
@@ -320,15 +304,12 @@ def run_bot():
         },
         fallbacks=[]
     )
-
-    app.add_handler(CommandHandler("start", start))
     app.add_handler(conv_handler)
-    return app
+    await app.run_polling()
 
 import threading
 if __name__ == "__main__":
-    bot_app = run_bot()
-    bot_thread = threading.Thread(target=bot_app.run_polling)
+    bot_thread = threading.Thread(target=asyncio.run(run_bot()), daemon=True)
     bot_thread.start()
 
     # Flask serverni boshqa portda ishga tushirish
